@@ -1,31 +1,31 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-class CherryBlossomScene {
+class SakuraScene {
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
     private renderer: THREE.WebGLRenderer;
     private controls: OrbitControls;
-    private cherryBlossoms: THREE.InstancedMesh;
+    private sakuras: THREE.InstancedMesh;
     private grassInstances: THREE.InstancedMesh;
+    private grassMaterial: THREE.ShaderMaterial;
 
     constructor() {
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setClearColor(new THREE.Color(0x87CEEB));
+        this.renderer.setClearColor(new THREE.Color(0x87CEEB)); //空
         document.body.appendChild(this.renderer.domElement);
+        
         this.camera.position.set(0, 0.6, 10);
         this.camera.lookAt(new THREE.Vector3(0, 4, 0));
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
         this.createScene();
-        this.createCherryBlossoms();
+        this.createSakura();
         this.createGrass();
         this.animate();
-
-        //window.addEventListener('resize', () => this.onWindowResize());
     }
 
     private createScene(): void {
@@ -33,7 +33,7 @@ class CherryBlossomScene {
         const groundGeometry = new THREE.PlaneGeometry(100, 100);
         const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x2b802b });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
+        ground.rotation.x = -Math.PI / 2; //水平に
         this.scene.add(ground);
 
         // 環境光追加
@@ -46,11 +46,11 @@ class CherryBlossomScene {
         this.scene.add(directionalLight);
     }
 
-    private createCherryBlossoms(): void {
-        const petalCount = 10000;
-        const petalGeometry = new THREE.PlaneGeometry(0.2, 0.2);
+    private createSakura(): void {
+        const sakuraCount = 10000;
+        const sakuraGeometry = new THREE.PlaneGeometry(0.2, 0.2);
         const texture = new THREE.TextureLoader().load('sakura.png');
-        const petalMaterial = new THREE.MeshBasicMaterial({
+        const sakuraMaterial = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
             side: THREE.DoubleSide,
@@ -60,20 +60,22 @@ class CherryBlossomScene {
             blending: THREE.NormalBlending
         });
 
-        this.cherryBlossoms = new THREE.InstancedMesh(petalGeometry, petalMaterial, petalCount);
+        this.sakuras = new THREE.InstancedMesh(sakuraGeometry, sakuraMaterial, sakuraCount);
 
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3();
         const rotation = new THREE.Euler();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3();
-
-        for (let i = 0; i < petalCount; i++) {
+        // 桜の配置
+        for (let i = 0; i < sakuraCount; i++) {
+            // 位置
             position.set(
                 Math.random() * 100 - 50,
                 Math.random() * 50,
                 Math.random() * 100 - 50
             );
+            // 回転
             rotation.set(
                 Math.random() * Math.PI,
                 Math.random() * Math.PI,
@@ -83,40 +85,42 @@ class CherryBlossomScene {
             scale.set(1, 1, 1);
 
             matrix.compose(position, quaternion, scale);
-            this.cherryBlossoms.setMatrixAt(i, matrix);
+            this.sakuras.setMatrixAt(i, matrix);
         }
 
-        this.scene.add(this.cherryBlossoms);
+        this.scene.add(this.sakuras);
     }
 
     private createGrassMaterial(): THREE.ShaderMaterial {
         const grassTexture = new THREE.TextureLoader().load('grass2.png');
 
         const vertexShader = `
-        uniform float time;
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            vec3 pos = position;
-            
-            // 草の上部揺らす
-            float windStrength = 0.1;
-            float windSpeed = 2.0;
-            if(pos.y > 0.5) {
-                pos.x += sin(time * windSpeed + position.x * 0.5) * windStrength * (pos.y - 0.5);
+            uniform float time;
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                vec3 pos = position;
+                
+                // 草の上部を揺らす
+                float windStrength = 0.1; //ゆらゆら度
+                float windSpeed = 2.0; //速度
+                if(pos.y > 0.5) { //上側
+                    // ワールド位置に応じてsin, 上ほど大きくゆらゆら
+                    pos.x += sin(time*windSpeed + instanceMatrix[3].x * 0.5 + instanceMatrix[3].z * 0.5) * windStrength * (pos.y - 0.5);
+                }
+                
+                vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
             }
-            
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-        }
         `;
 
         const fragmentShader = `
-        uniform sampler2D map;
-        varying vec2 vUv;
-        void main() {
-            gl_FragColor = texture2D(map, vUv);
-            if(gl_FragColor.a < 0.5) discard; //透明を無視
-        }
+            uniform sampler2D map;
+            varying vec2 vUv;
+            void main() {
+                gl_FragColor = texture2D(map, vUv);
+                if(gl_FragColor.a < 0.5) discard; // 透明を無視
+            }
         `;
 
         return new THREE.ShaderMaterial({
@@ -127,7 +131,7 @@ class CherryBlossomScene {
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
             transparent: true,
-            side: THREE.DoubleSide,
+            side: THREE.DoubleSide, //両側
             alphaTest: 0.5,
             depthTest: true,
             depthWrite: true,
@@ -138,57 +142,49 @@ class CherryBlossomScene {
     private createGrass(): void {
         const grassCount = 100000;
         const grassGeometry = new THREE.PlaneGeometry(0.3, 1.5);
-        const grassTexture = new THREE.TextureLoader().load('grass2.png');
-        //const grassMaterial = this.createGrassMaterial();
-        const grassMaterial = new THREE.MeshBasicMaterial({
-            map: grassTexture,
-            transparent: true,
-            side: THREE.DoubleSide,
-            alphaTest: 0.5,
-            depthTest: true,
-            depthWrite: true,
-            blending: THREE.NormalBlending
-        });
-
-        this.grassInstances = new THREE.InstancedMesh(grassGeometry, grassMaterial, grassCount);
+        this.grassMaterial = this.createGrassMaterial();
+        // 草が多いからインスタンス化
+        this.grassInstances = new THREE.InstancedMesh(grassGeometry, this.grassMaterial, grassCount);
 
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3();
         const rotation = new THREE.Euler();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3();
-
+        // 草の配置
         for (let i = 0; i < grassCount; i++) {
             position.set(
                 Math.random() * 100 - 50,
                 0,
                 Math.random() * 100 - 50
             );
+            // yだけランダム
             rotation.set(0, Math.random() * Math.PI, 0);
             quaternion.setFromEuler(rotation);
+            // 大きさちょっとランダムに
             scale.set(1, 1 + Math.random() * 0.5, 1);
 
             matrix.compose(position, quaternion, scale);
             this.grassInstances.setMatrixAt(i, matrix);
         }
-
+        // 草追加
         this.scene.add(this.grassInstances);
     }
 
-    private animateCherryBlossoms(): void {
+    private animateSakuras(): void {
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3();
         const rotation = new THREE.Euler();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3();
 
-        for (let i = 0; i < this.cherryBlossoms.count; i++) {
-            this.cherryBlossoms.getMatrixAt(i, matrix);
+        for (let i = 0; i < this.sakuras.count; i++) {
+            this.sakuras.getMatrixAt(i, matrix);
             matrix.decompose(position, quaternion, scale);
 
-            position.y -= 0.02;
+            position.y -= 0.02; //落ちてく
             if (position.y < 0) {
-                position.y = 50;
+                position.y = 50; //上に戻す
             }
             position.x += Math.sin(Date.now() * 0.001 + i) * 0.01;
 
@@ -199,32 +195,24 @@ class CherryBlossomScene {
             quaternion.setFromEuler(rotation);
 
             matrix.compose(position, quaternion, scale);
-            this.cherryBlossoms.setMatrixAt(i, matrix);
+            this.sakuras.setMatrixAt(i, matrix);
         }
-        this.cherryBlossoms.instanceMatrix.needsUpdate = true;
+        this.sakuras.instanceMatrix.needsUpdate = true;
     }
 
     private animate(): void {
         requestAnimationFrame(() => this.animate());
 
-        this.animateCherryBlossoms();
+        this.animateSakuras();
 
-        const time = performance.now() * 0.001; // 秒単位の時間
-        // 草のマテリアルの時間を更新
-        if (this.grassInstances.material instanceof THREE.ShaderMaterial) {
-            this.grassInstances.material.uniforms.time.value = time;
-        }
+        const time = performance.now() * 0.001; // 秒で更新
+        // 草のマテリアルの時間更新
+        this.grassMaterial.uniforms.time.value = time;
 
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
     }
-
-    // private onWindowResize(): void {
-    //     this.camera.aspect = window.innerWidth / window.innerHeight;
-    //     this.camera.updateProjectionMatrix();
-    //     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    // }
 }
 
-// シーンの作成
-new CherryBlossomScene();
+// シーン
+new SakuraScene();
